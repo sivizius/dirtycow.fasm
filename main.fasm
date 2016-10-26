@@ -1,14 +1,14 @@
-;create readonly file and check
+;( create readonly file and check )
 ;> sudo cat 'hello world, this is the original content' > test.txt
 ;> sudo chmod -w test.txt
 ;> sudo -k
 ;> ls -l test.txt
 ;> cat test.txt
-;compile
+;( compile )
 ;> fasm ./main.fasm ./dirtycow
-;and execute
+;( and execute )
 ;> ./dirtycow
-;> cat text.txt
+;> cat test.txt
 
 format                                  ELF64                                   executable
 use64
