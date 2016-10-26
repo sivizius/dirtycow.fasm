@@ -1,0 +1,8 @@
+*.fasm linguist-language=Assembly
+*.fdat linguist-language=Assembly
+*.finc linguist-language=Assembly
+*.flib linguist-language=Assembly
+*.fobj linguist-language=Assembly
+*.fres linguist-language=Assembly
+*.ftxt linguist-language=Assembly
+
